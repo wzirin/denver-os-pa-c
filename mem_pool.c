@@ -436,10 +436,16 @@ void mem_inspect_pool(pool_pt pool,
                     *segments = segs;
                     *num_segments = pool_mgr->used_nodes;
      */
-    for(int i = 0; i < memPoolMgr->used_nodes; i++) {
-        segmentArray[i].size = memPoolMgr->node_heap[i].alloc_record.size;
-        segmentArray[i].allocated = memPoolMgr->node_heap[i].allocated;
+    node_pt node = &memPoolMgr->node_heap[0];
+    int i = 0;
+    while(node != NULL) {
+        segmentArray[i].allocated = node->allocated;
+        segmentArray[i].size = node->alloc_record.size;
+        node = node->next;
+        i++;
     }
+    *segments = segmentArray;
+    *num_segments = memPoolMgr->used_nodes;
 }
 
 
