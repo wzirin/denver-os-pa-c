@@ -103,7 +103,7 @@ alloc_status mem_init() {
     // note: holds pointers only, other functions to allocate/deallocate
     else {
         pool_store_capacity = MEM_POOL_STORE_INIT_CAPACITY;
-        pool_store = (pool_mgr_pt*) calloc(pool_store_capacity, sizeof(pool_mgr_pt));
+        pool_store = calloc(pool_store_capacity, sizeof(pool_mgr_pt));
         if(pool_store != NULL) {
             return ALLOC_OK;
         }
@@ -139,13 +139,13 @@ pool_pt mem_pool_open(size_t size, alloc_policy policy) {
     // expand the pool store, if necessary
     _mem_resize_pool_store();
     // allocate a new mem pool mgr
-    pool_mgr_pt memPoolMgr = (pool_mgr_pt) malloc(sizeof(pool_mgr_pt));
+    pool_mgr_pt memPoolMgr = malloc(sizeof(pool_mgr_pt));
     // check success, on error return null
     if(memPoolMgr == NULL) {
         return NULL;
     }
     // allocate a new memory pool
-    memPoolMgr->pool.mem = (char*) malloc(size);
+    memPoolMgr->pool.mem = malloc(size);
     // check success, on error deallocate mgr and return null
     if(memPoolMgr->pool.mem == NULL) {
         free(memPoolMgr);
@@ -415,8 +415,11 @@ void mem_inspect_pool(pool_pt pool,
                       pool_segment_pt *segments,
                       unsigned *num_segments) {
     // get the mgr from the pool
+    pool_mgr_pt memPoolMgr = (pool_mgr_pt) pool;
     // allocate the segments array with size == used_nodes
     // check successful
+    pool_segment_pt segmentArray = calloc(memPoolMgr->used_nodes, sizeof(pool_segment_pt));
+    assert(segmentArray != NULL);
     // loop through the node heap and the segments array
     //    for each node, write the size and allocated in the segment
     // "return" the values:
@@ -424,6 +427,10 @@ void mem_inspect_pool(pool_pt pool,
                     *segments = segs;
                     *num_segments = pool_mgr->used_nodes;
      */
+    for(int i = 0; i < memPoolMgr->used_nodes; i++) {
+        segmentArray[i].size = memPoolMgr->node_heap[i].alloc_record.size;
+        segmentArray[i].allocated = memPoolMgr->node_heap[i].allocated;
+    }
 }
 
 
@@ -514,13 +521,30 @@ static alloc_status _mem_remove_from_gap_ix(pool_mgr_pt pool_mgr,
                                             size_t size,
                                             node_pt node) {
     // find the position of the node in the gap index
+    int index = -1;
+    for(int i = 0; i < pool_mgr->pool.num_gaps; i++) {
+        if(pool_mgr->gap_ix[i].node == node) {
+            index = i;
+        }
+    }
+    if(index == -1) {
+        return ALLOC_FAIL;
+    }
+    else {
+        for(int i = index; i < pool_mgr->pool.num_gaps - 1; i++) {
+            pool_mgr->gap_ix[i] = pool_mgr->gap_ix[i + 1];
+        }
+    }
     // loop from there to the end of the array:
     //    pull the entries (i.e. copy over) one position up
     //    this effectively deletes the chosen node
     // update metadata (num_gaps)
+    pool_mgr->pool.num_gaps--;
     // zero out the element at position num_gaps!
+    pool_mgr->gap_ix[pool_mgr->pool.num_gaps].size = 0;
+    pool_mgr->gap_ix[pool_mgr->pool.num_gaps].node = NULL;
 
-    return ALLOC_FAIL;
+    return ALLOC_OK;
 }
 
 // note: only called by _mem_add_to_gap_ix, which appends a single entry
