@@ -562,7 +562,7 @@ static alloc_status _mem_add_to_gap_ix(pool_mgr_pt pool_mgr,
     // update metadata (num_gaps)
     pool_mgr->pool.num_gaps++;
     // sort the gap index (call the function)
-    assert(_mem_sort_gap_ix(pool_mgr) == ALLOC_OK);
+    _mem_sort_gap_ix(pool_mgr);
     // check success
 
     return ALLOC_OK;
@@ -573,31 +573,31 @@ static alloc_status _mem_remove_from_gap_ix(pool_mgr_pt pool_mgr,
                                             node_pt node) {
     //printf("_mem_remove_from_gap_ix\n");
     // find the position of the node in the gap index
-    int index = -1;
+    int found = 0;
     for(int i = 0; i < pool_mgr->pool.num_gaps; i++) {
         if(pool_mgr->gap_ix[i].node == node) {
-            index = i;
+            found = 1;
+        }
+        if(found == 1) {
+            pool_mgr->gap_ix[i] = pool_mgr->gap_ix[i + 1];
         }
     }
-    if(index == -1) {
+    if(found == 0) {
         //printf("_mem_remove_from_gap_ix fail\n");
         return ALLOC_FAIL;
     }
     else {
-        for(int i = index; i < pool_mgr->pool.num_gaps - 1; i++) {
-            pool_mgr->gap_ix[i] = pool_mgr->gap_ix[i + 1];
-        }
+        int lastEntry = pool_mgr->pool.num_gaps;
+        pool_mgr->pool.num_gaps--;
+        pool_mgr->gap_ix[lastEntry].size = 0;
+        pool_mgr->gap_ix[lastEntry].node = NULL;
+        return ALLOC_OK;
     }
     // loop from there to the end of the array:
     //    pull the entries (i.e. copy over) one position up
     //    this effectively deletes the chosen node
     // update metadata (num_gaps)
-    pool_mgr->pool.num_gaps--;
     // zero out the element at position num_gaps!
-    pool_mgr->gap_ix[pool_mgr->pool.num_gaps].size = 0;
-    pool_mgr->gap_ix[pool_mgr->pool.num_gaps].node = NULL;
-
-    return ALLOC_OK;
 }
 
 // note: only called by _mem_add_to_gap_ix, which appends a single entry
@@ -628,20 +628,14 @@ static alloc_status _mem_sort_gap_ix(pool_mgr_pt pool_mgr) {
         gap1 = gap2;
     }*/
     for(int i = pool_mgr->pool.num_gaps - 1; i > 0; i--) {
-        for(int j = 0; j < i; j++) {
-            if(pool_mgr->gap_ix[j].size < pool_mgr->gap_ix[j + 1].size) {
-                size_t tempSize = pool_mgr->gap_ix[j].size;
-                node_pt tempNode = pool_mgr->gap_ix[j].node;
-                pool_mgr->gap_ix[j].size = pool_mgr->gap_ix[j + 1].size;
-                pool_mgr->gap_ix[j].node = pool_mgr->gap_ix[j + 1].node;
-                pool_mgr->gap_ix[j + 1].size = tempSize;
-                pool_mgr->gap_ix[j + 1].node = tempNode;
-            }
+        if(pool_mgr->gap_ix[i].size < pool_mgr->gap_ix[i - 1].size) {
+            size_t tempSize = pool_mgr->gap_ix[i].size;
+            node_pt tempNode = pool_mgr->gap_ix[i].node;
+            pool_mgr->gap_ix[i].size = pool_mgr->gap_ix[i - 1].size;
+            pool_mgr->gap_ix[i].node = pool_mgr->gap_ix[i - 1].node;
+            pool_mgr->gap_ix[i - 1].size = tempSize;
+            pool_mgr->gap_ix[i - 1].node = tempNode;
         }
-    }
-
-    for(int i = 0; i < pool_mgr->pool.num_gaps; i++) {
-        printf("%d\n", (int) pool_mgr->gap_ix[i].size);
     }
     return ALLOC_OK;
 }
